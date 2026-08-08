@@ -62,7 +62,7 @@ try:
     import torch
     from PIL import Image
     from transformers import AutoImageProcessor, AutoModelForImageClassification
-except ImportError:  # pragma: no cover - exercised in minimal environments
+except ImportError:  
     torch = None
     Image = None
     AutoImageProcessor = None
@@ -76,11 +76,11 @@ logger.warning("FastAPI/uvicorn not available; using built-in fallback server.")
 
 MODEL_NAME = "linkanjarad/mobilenet_v2_1.0_224-plant-disease-identification"
 
-MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # 8 MB
+MAX_UPLOAD_BYTES = 8 * 1024 * 1024  
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
-LOW_CONFIDENCE_THRESHOLD = 50.0  # below this, flag the result as uncertain
+LOW_CONFIDENCE_THRESHOLD = 50.0  
 
-# Loaded once at startup, reused for every request.
+
 processor = None
 model = None
 
