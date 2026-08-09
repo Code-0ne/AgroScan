@@ -14,9 +14,23 @@ import {
   AdvisoryLoadingSkeleton,
 } from "./src/components";
 
-const API_URL = "/api/diagnose";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
+const API_URL = `${API_BASE}/diagnose`;
+const ADVISORY_URL = `${API_BASE}/advisory`;
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const ALLOWED_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+
+async function parseJsonSafe(res) {
+  const text = await res.text();
+  if (!text) {
+    throw new Error("No response from the server — it may still be waking up...");
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error("Server returned an unexpected response...");
+  }
+}
 
 export default function App() {
   const [theme, setTheme] = useState("dark");
@@ -89,33 +103,33 @@ export default function App() {
     if (!file) return;
     setStatus("scanning");
     setError(null);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await fetch(API_URL, { method: "POST", body: formData });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail || `Request failed (${res.status})`);
-      }
-      const data = await res.json();
-      setResult(data);
-
-      try {
-        const coords = await getCoords();
-        if (coords) {
-          const advRes = await fetch(
-            `/api/advisory?crop=${encodeURIComponent(data.crop)}&is_healthy=${data.is_healthy}&latitude=${coords.lat}&longitude=${coords.lng}`
-          );
-          if (advRes.ok) {
-            const advData = await advRes.json();
-            setAdvisory(advData);
-          }
+try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await fetch(API_URL, { method: "POST", body: formData });
+        if (!res.ok) {
+          const body = await parseJsonSafe(res).catch(() => ({}));
+          throw new Error(body.detail || `Request failed (${res.status})`);
         }
-      } catch (advErr) {
-        console.error("Advisory fetch failed:", advErr);
-      }
+        const data = await parseJsonSafe(res);
+        setResult(data);
 
-      setStatus("done");
+        try {
+          const coords = await getCoords();
+          if (coords) {
+            const advRes = await fetch(
+              `${ADVISORY_URL}?crop=${encodeURIComponent(data.crop)}&is_healthy=${data.is_healthy}&latitude=${coords.lat}&longitude=${coords.lng}`
+            );
+            if (advRes.ok) {
+              const advData = await parseJsonSafe(advRes);
+              setAdvisory(advData);
+            }
+          }
+        } catch (advErr) {
+          console.error("Advisory fetch failed:", advErr);
+        }
+
+        setStatus("done");
     } catch (err) {
       setError(err.message || "Something went wrong. Please try again.");
       setStatus("error");
