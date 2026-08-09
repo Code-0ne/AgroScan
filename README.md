@@ -47,6 +47,44 @@ for Windows.
 - **Structured logging** — `X-Request-ID`, response timing on every request
 - **Weather advisory** — `/advisory` endpoint fetches Open-Meteo 3-day forecast and returns irrigation/fertilizer/disease-risk recommendations
 
+## Weather Advisory
+
+After a diagnosis, the frontend requests a weather-aware advisory:
+
+```bash
+GET /advisory?crop=Tomato&is_healthy=false&latitude=28.6139&longitude=77.2090
+```
+
+**Backend flow:**
+1. Calls Open-Meteo API (free, no key) for 3-day forecast: precipitation, max temp, mean humidity
+2. `build_advisory()` in `advisory.py` generates recommendations:
+
+| Category | Logic |
+|----------|-------|
+| **Irrigation** | ≥15mm rain → hold off; 3–15mm → reduce by half; hot+dry → irrigate early/late; else normal |
+| **Fertilizer** | ≥15mm rain → delay (washes off); else apply as scheduled |
+| **Disease Risk** | If sick + (humidity ≥75% or rain ≥3mm) → apply treatment urgently; if healthy + humidity ≥80% → monitor closely |
+
+**Response example:**
+```json
+{
+  "crop": "Tomato",
+  "forecast_summary": { "rain_next_3_days_mm": 23.3, "avg_humidity_pct": 87.7, "hot_day_ahead": false },
+  "daily_forecast": [
+    { "date": "2026-08-09", "rain_mm": 3.3, "temp_max_c": 33.1, "humidity_pct": 85 },
+    { "date": "2026-08-10", "rain_mm": 9.5, "temp_max_c": 31.7, "humidity_pct": 88 },
+    { "date": "2026-08-11", "rain_mm": 10.5, "temp_max_c": 30.1, "humidity_pct": 90 }
+  ],
+  "recommendations": [
+    { "category": "Irrigation", "advice": "Significant rain expected (23mm over the next 3 days) — hold off irrigation..." },
+    { "category": "Fertilizer", "advice": "Heavy rain forecast — delay fertilizer application..." },
+    { "category": "Disease Risk", "advice": "High humidity and/or rain forecast for Tomato — favorable conditions for disease spread..." }
+  ]
+}
+```
+
+**Frontend:** Renders as a card below diagnosis with staggered entrance animation (StaggerChildren 0.06s). Shows forecast summary badges + recommendation list. Gracefully handles missing location (shows placeholder) and weather API failures.
+
 ## Frontend
 
 ```bash
