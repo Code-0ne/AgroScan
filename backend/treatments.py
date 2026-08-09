@@ -1,21 +1,4 @@
-"""
-Hardcoded knowledge base mapping each of the 38 classes produced by
-linkanjarad/mobilenet_v2_1.0_224-plant-disease-identification to:
-  - a readable crop name
-  - a readable disease name (or "Healthy")
-  - whether it's a healthy class
-  - a pair of treatment suggestions (organic / chemical)
 
-The model's id2label strings are NOT the raw PlantVillage
-"Crop___Disease" format — they're already human-readable, e.g.
-"Tomato with Septoria Leaf Spot", "Healthy Apple", "Apple Scab".
-The phrasing is inconsistent class to class (some have no "with", some
-say "Healthy X" vs "Healthy X Plant"), so each of the 38 raw labels is
-mapped explicitly below rather than parsed with a generic rule — safer
-than guessing and silently mislabeling.
-"""
-
-# raw_label -> (crop, disease, is_healthy)
 LABEL_INFO = {
     "Apple Scab": ("Apple", "Scab", False),
     "Apple with Black Rot": ("Apple", "Black Rot", False),
@@ -57,7 +40,6 @@ LABEL_INFO = {
     "Healthy Tomato Plant": ("Tomato", "Healthy", True),
 }
 
-# raw_label -> {"organic": ..., "chemical": ...}
 TREATMENTS = {
     "Apple Scab": {
         "organic": "Remove and destroy fallen leaves each autumn to cut the fungus's overwintering site; apply sulfur or copper-based fungicide sprays from bud break through early summer.",
@@ -220,17 +202,9 @@ _FALLBACK_TREATMENT = {
 
 
 def get_treatment(raw_label: str):
-    """Look up treatment suggestions for a raw model label."""
     return TREATMENTS.get(raw_label, _FALLBACK_TREATMENT)
 
-
 def split_label(raw_label: str):
-    """Turn a raw model label (e.g. 'Tomato with Septoria Leaf Spot')
-    into a (crop, disease, is_healthy) tuple using the explicit lookup
-    table above — the label phrasing is too inconsistent to parse
-    generically without risking a wrong split."""
     if raw_label in LABEL_INFO:
         return LABEL_INFO[raw_label]
-    # Unknown label (e.g. model was swapped): fall back to showing the
-    # raw string rather than silently mislabeling it.
     return raw_label, "Unknown", False

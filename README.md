@@ -1,7 +1,15 @@
-# Crop Doctor
+# AgroScan
 
 Pest/disease identification from a leaf photo: React frontend → FastAPI backend →
 MobileNetV2 (fine-tuned on PlantVillage, 38 classes) → treatment lookup.
+
+## Model & Dataset
+
+AgroScan utilizes a **MobileNetV2** architecture, specifically the model `linkanjarad/mobilenet_v2_1.0_224-plant-disease-identification` from Hugging Face. 
+
+- **Dataset**: The model is fine-tuned on the **PlantVillage** dataset, a comprehensive open-access database of healthy and diseased crop leaves.
+- **Capabilities**: It can identify **38 different conditions** across various crops including Tomato, Potato, Corn, Apple, Grape, and more.
+- **Input**: Images are preprocessed to 224×224 pixels and normalized before inference.
 
 ## Backend
 
@@ -10,8 +18,8 @@ venv step needed, `uv run` creates and reuses one automatically based on
 `pyproject.toml`.
 
 ```bash
-cd backend
-uv run uvicorn main:app --reload --port 8000
+uv sync
+uv run main.py
 ```
 
 That first command resolves and installs dependencies into `.venv` (creating

@@ -5,19 +5,25 @@ const MAX_FILE_BYTES = 8 * 1024 * 1024; // 8 MB, matches backend cap
 const ALLOWED_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
 
 export default function App() {
+  const [theme, setTheme] = useState("dark");
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
-  const [status, setStatus] = useState("idle"); // idle | scanning | done | error
+  const [status, setStatus] = useState("idle"); 
   const [result, setResult] = useState(null);
+  const [advisory, setAdvisory] = useState(null);
+  const [location, setLocation] = useState(null);
   const [error, setError] = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const inputRef = useRef(null);
+
+  const toggleTheme = () => setTheme(prev => prev === "dark" ? "light" : "dark");
 
   const reset = () => {
     setFile(null);
     setPreviewUrl(null);
     setStatus("idle");
     setResult(null);
+    setAdvisory(null);
     setError(null);
   };
 
@@ -59,6 +65,23 @@ export default function App() {
       }
       const data = await res.json();
       setResult(data);
+
+      // Fetch Advisory
+      try {
+        const coords = await getCoords();
+        if (coords) {
+          const advRes = await fetch(
+            `/api/advisory?crop=${encodeURIComponent(data.crop)}&is_healthy=${data.is_healthy}&latitude=${coords.lat}&longitude=${coords.lng}`
+          );
+          if (advRes.ok) {
+            const advData = await advRes.json();
+            setAdvisory(advData);
+          }
+        }
+      } catch (advErr) {
+        console.error("Advisory fetch failed:", advErr);
+      }
+
       setStatus("done");
     } catch (err) {
       setError(err.message || "Something went wrong.");
@@ -66,8 +89,25 @@ export default function App() {
     }
   };
 
+  const getCoords = () => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        console.warn("Geolocation not supported");
+        resolve(null);
+      } else {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+          (err) => {
+            console.warn("Location access denied");
+            resolve(null);
+          }
+        );
+      }
+    });
+  };
+
   return (
-    <div className="page">
+    <div className={`page ${theme}`}>
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">
@@ -81,9 +121,14 @@ export default function App() {
               <path d="M12 6v14M12 10c-2 0-3.5-1.2-4.5-3M12 14c2.4 0 4-1.4 5-3.4" fill="none" stroke="currentColor" strokeWidth="1.2" />
             </svg>
           </span>
-          <span className="brand-name">Crop&nbsp;Doctor</span>
+          <span className="brand-name">AgroScan</span>
         </div>
-        <span className="topbar-note">field diagnosis · 38 conditions</span>
+        <div className="topbar-right">
+          <button className="theme-toggle" onClick={toggleTheme} aria-label="Toggle light/dark mode">
+            {theme === "dark" ? "☀️" : "🌙"}
+          </button>
+          <span className="topbar-note">field diagnosis · 38 conditions</span>
+        </div>
       </header>
 
       <main className="layout">
@@ -99,6 +144,11 @@ export default function App() {
             known crop conditions across tomato, potato, corn, apple, grape and more, then
             hands back a diagnosis with treatment options.
           </p>
+          <div className="disclaimer">
+            <strong>Supported Crops:</strong> Apple, Blueberry, Cherry, Corn, Grape, Orange, Peach, Pepper, Potato, Raspberry, Soybean, Squash, Strawberry, Tomato.
+            <br />
+            <em>Note: This tool is for educational purposes and should be used as a supplement to professional agricultural advice.</em>
+          </div>
 
           <div
             className={`dropzone ${dragActive ? "active" : ""} ${previewUrl ? "has-image" : ""}`}
@@ -168,7 +218,25 @@ export default function App() {
               <p>Resizing to 224×224, running convolutional layers…</p>
             </div>
           )}
-          {result && <DiagnosisCard result={result} />}
+          {result && (
+            <>
+              <DiagnosisCard result={result} />
+              <div className="advisory-container" style={{ marginTop: '2rem' }}>
+                <p className="eyebrow">03 — Weather Advisory</p>
+                {!advisory && status === "done" && (
+                  <div className="placeholder">
+                    <p>Weather-aware advice could not be loaded.</p>
+                  </div>
+                )}
+                {status === "scanning" && (
+                  <div className="placeholder scanning-placeholder">
+                    <p>Fetching local weather forecast…</p>
+                  </div>
+                )}
+                {advisory && <AdvisoryCard advisory={advisory} />}
+              </div>
+            </>
+          )}
         </section>
       </main>
 
@@ -261,6 +329,34 @@ function ConfidenceRing({ value, healthy, lowConfidence }) {
         />
       </svg>
       <span className="ring-number">{value}%</span>
+    </div>
+  );
+}
+
+function AdvisoryCard({ advisory }) {
+  const { crop, forecast_summary, recommendations } = advisory;
+
+  return (
+    <div className="card advisory">
+      <div className="card-head">
+        <div>
+          <p className="card-crop">{crop}</p>
+          <h2 className="card-disease">Weather Advisory</h2>
+        </div>
+        <div className="weather-summary">
+          <span>🌧 {forecast_summary.rain_next_3_days_mm}mm rain</span>
+          <span>💧 {forecast_summary.avg_humidity_pct}% humidity</span>
+        </div>
+      </div>
+
+      <div className="advisory-grid">
+        {recommendations.map((rec, i) => (
+          <div key={i} className="advisory-item">
+            <p className="advisory-category">{rec.category}</p>
+            <p>{rec.advice}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
