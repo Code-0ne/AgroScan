@@ -43,12 +43,15 @@ export default function App() {
 
   useEffect(() => {
     const saved = localStorage.getItem("agroscan-theme");
-    if (saved) setTheme(saved);
+    if (saved) {
+      setTheme(saved);
+      document.documentElement.setAttribute("data-theme", saved);
+    }
   }, []);
 
   useEffect(() => {
     localStorage.setItem("agroscan-theme", theme);
-    document.documentElement.style.colorScheme = theme;
+    document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
   const toggleTheme = () => setTheme((prev) => (prev === "dark" ? "light" : "dark"));
