@@ -1,22 +1,43 @@
-import { useCallback, useRef, useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { motion } from "framer-motion";
+import { X } from "@phosphor-icons/react";
+import {
+  Dropzone,
+  PrimaryButton,
+  ResetButton,
+  ThemeToggle,
+  DiagnosisCard,
+  AdvisoryCard,
+  DiagnosisSkeleton,
+  AdvisorySkeleton,
+  ScanningSkeleton,
+  AdvisoryLoadingSkeleton,
+} from "./src/components";
 
 const API_URL = "/api/diagnose";
-const MAX_FILE_BYTES = 8 * 1024 * 1024; // 8 MB, matches backend cap
+const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const ALLOWED_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
 
 export default function App() {
   const [theme, setTheme] = useState("dark");
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
-  const [status, setStatus] = useState("idle"); 
+  const [status, setStatus] = useState("idle");
   const [result, setResult] = useState(null);
   const [advisory, setAdvisory] = useState(null);
-  const [location, setLocation] = useState(null);
   const [error, setError] = useState(null);
-  const [dragActive, setDragActive] = useState(false);
-  const inputRef = useRef(null);
 
-  const toggleTheme = () => setTheme(prev => prev === "dark" ? "light" : "dark");
+  useEffect(() => {
+    const saved = localStorage.getItem("agroscan-theme");
+    if (saved) setTheme(saved);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("agroscan-theme", theme);
+    document.documentElement.style.colorScheme = theme;
+  }, [theme]);
+
+  const toggleTheme = () => setTheme((prev) => (prev === "dark" ? "light" : "dark"));
 
   const reset = () => {
     setFile(null);
@@ -30,6 +51,8 @@ export default function App() {
   const handleFile = useCallback((f) => {
     if (!f) return;
     setResult(null);
+    setAdvisory(null);
+    setError(null);
 
     if (!ALLOWED_TYPES.includes(f.type)) {
       setError("Please choose a JPEG, PNG, or WEBP image.");
@@ -40,15 +63,26 @@ export default function App() {
       return;
     }
 
-    setError(null);
     setFile(f);
     setPreviewUrl(URL.createObjectURL(f));
   }, []);
 
-  const onDrop = (e) => {
-    e.preventDefault();
-    setDragActive(false);
-    handleFile(e.dataTransfer.files?.[0]);
+  const getCoords = () => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        console.warn("Geolocation not supported");
+        resolve(null);
+      } else {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+          (err) => {
+            console.warn("Location access denied:", err.message);
+            resolve(null);
+          },
+          { timeout: 5000 }
+        );
+      }
+    });
   };
 
   const runDiagnosis = async () => {
@@ -66,7 +100,6 @@ export default function App() {
       const data = await res.json();
       setResult(data);
 
-      // Fetch Advisory
       try {
         const coords = await getCoords();
         if (coords) {
@@ -84,56 +117,49 @@ export default function App() {
 
       setStatus("done");
     } catch (err) {
-      setError(err.message || "Something went wrong.");
+      setError(err.message || "Something went wrong. Please try again.");
       setStatus("error");
     }
   };
 
-  const getCoords = () => {
-    return new Promise((resolve) => {
-      if (!navigator.geolocation) {
-        console.warn("Geolocation not supported");
-        resolve(null);
-      } else {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-          (err) => {
-            console.warn("Location access denied");
-            resolve(null);
-          }
-        );
-      }
-    });
-  };
-
   return (
     <div className={`page ${theme}`}>
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="22" height="22">
-              <path
-                d="M12 2C7 4 4 8 4 13c0 4.4 3.6 8 8 8s8-3.6 8-8c0-5-3-9-8-11z"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.4"
-              />
-              <path d="M12 6v14M12 10c-2 0-3.5-1.2-4.5-3M12 14c2.4 0 4-1.4 5-3.4" fill="none" stroke="currentColor" strokeWidth="1.2" />
-            </svg>
-          </span>
-          <span className="brand-name">AgroScan</span>
-        </div>
-        <div className="topbar-right">
-          <button className="theme-toggle" onClick={toggleTheme} aria-label="Toggle light/dark mode">
-            {theme === "dark" ? "☀️" : "🌙"}
-          </button>
-          <span className="topbar-note">field diagnosis · 38 conditions</span>
+      <a href="#main-content" className="skip-link">
+        Skip to main content
+      </a>
+
+      <header className="topbar" role="banner">
+        <div className="topbar-inner">
+          <div className="topbar-left">
+            <a href="/" className="brand" aria-label="AgroScan home">
+              <span className="brand-mark" aria-hidden="true">
+                <svg viewBox="0 0 100 100" width="28" height="28" fill="none">
+                  <path
+                    d="M50 8C30 15 12 35 12 58c0 20 14 36 38 36s38-16 38-36c0-23-18-43-38-50z"
+                    stroke="currentColor"
+                    strokeWidth="6"
+                  />
+                  <path
+                    d="M50 18v64M50 30c-12 0-21 7-28 18M50 42c16 0 26-9 33-22"
+                    stroke="currentColor"
+                    strokeWidth="5"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </span>
+              <span className="brand-name">AgroScan</span>
+            </a>
+          </div>
+          <div className="topbar-right">
+            <span className="topbar-note" aria-hidden="true">Field diagnosis · 38 conditions</span>
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
+          </div>
         </div>
       </header>
 
-      <main className="layout">
-        <section className="intake">
-          <p className="eyebrow">01 — Submit a leaf</p>
+      <main className="layout" id="main-content" role="main">
+        <section className="intake" aria-labelledby="intake-heading">
+          <p className="eyebrow" id="intake-heading">01 — Submit a leaf</p>
           <h1>
             Photograph the leaf.
             <br />
@@ -144,95 +170,72 @@ export default function App() {
             known crop conditions across tomato, potato, corn, apple, grape and more, then
             hands back a diagnosis with treatment options.
           </p>
-          <div className="disclaimer">
-            <strong>Supported Crops:</strong> Apple, Blueberry, Cherry, Corn, Grape, Orange, Peach, Pepper, Potato, Raspberry, Soybean, Squash, Strawberry, Tomato.
+          <div className="disclaimer" role="note">
+            <strong>Supported crops:</strong> Apple, Blueberry, Cherry, Corn, Grape, Orange, Peach,
+            Pepper, Potato, Raspberry, Soybean, Squash, Strawberry, Tomato.
             <br />
-            <em>Note: This tool is for educational purposes and should be used as a supplement to professional agricultural advice.</em>
+            <em>This tool is for educational purposes and supplements — not replaces — professional agricultural advice.</em>
           </div>
 
-          <div
-            className={`dropzone ${dragActive ? "active" : ""} ${previewUrl ? "has-image" : ""}`}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragActive(true);
-            }}
-            onDragLeave={() => setDragActive(false)}
-            onDrop={onDrop}
-            onClick={() => inputRef.current?.click()}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => e.key === "Enter" && inputRef.current?.click()}
-          >
-            {previewUrl ? (
-              <img src={previewUrl} alt="Selected leaf" className="preview-img" />
-            ) : (
-              <div className="dropzone-copy">
-                <span className="dropzone-icon" aria-hidden="true">
-                  ⌁
-                </span>
-                <p>Drop a photo here, or click to choose one</p>
-                <p className="dropzone-hint">JPG, PNG or WEBP · under 8MB · one leaf, filling most of the frame</p>
-              </div>
-            )}
-            {status === "scanning" && (
-              <div className="scan-overlay">
-                <div className="scan-line" />
-              </div>
-            )}
-            <input
-              ref={inputRef}
-              type="file"
-              accept="image/*"
-              hidden
-              onChange={(e) => handleFile(e.target.files?.[0])}
-            />
-          </div>
+          <Dropzone
+            file={file}
+            previewUrl={previewUrl}
+            status={status}
+            onFileSelect={handleFile}
+            onReset={reset}
+          />
+
+          {error && (
+            <motion.div
+              className="error-msg"
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ type: "spring", stiffness: 100, damping: 20 }}
+              role="alert"
+            >
+              <X size={20} weight="duotone" style={{ flexShrink: 0, marginTop: 2 }} />
+              <span>{error}</span>
+            </motion.div>
+          )}
 
           <div className="actions">
-            <button
-              className="btn-primary"
+            <PrimaryButton
               disabled={!file || status === "scanning"}
               onClick={runDiagnosis}
+              loading={status === "scanning"}
             >
-              {status === "scanning" ? "Reading leaf…" : "Diagnose leaf"}
-            </button>
+              Diagnose leaf
+            </PrimaryButton>
             {(file || result) && (
-              <button className="btn-ghost" onClick={reset} disabled={status === "scanning"}>
-                Start over
-              </button>
+              <ResetButton onClick={reset} disabled={status === "scanning"} />
             )}
           </div>
-
-          {error && <p className="error-msg">⚠ {error}</p>}
         </section>
 
-        <section className="readout">
-          <p className="eyebrow">02 — Diagnosis</p>
+        <section className="readout" aria-labelledby="readout-heading">
+          <p className="eyebrow" id="readout-heading">02 — Diagnosis</p>
           {!result && status !== "scanning" && (
-            <div className="placeholder">
+            <div className="placeholder" role="status" aria-live="polite">
+              <span className="placeholder-icon" aria-hidden="true">ℹ</span>
               <p>Results will appear here once a leaf has been scanned.</p>
             </div>
           )}
-          {status === "scanning" && (
-            <div className="placeholder scanning-placeholder">
-              <p>Resizing to 224×224, running convolutional layers…</p>
-            </div>
-          )}
+          {status === "scanning" && <ScanningSkeleton />}
           {result && (
             <>
               <DiagnosisCard result={result} />
-              <div className="advisory-container" style={{ marginTop: '2rem' }}>
+              <div className="advisory-container" style={{ marginTop: "2.5rem" }}>
                 <p className="eyebrow">03 — Weather Advisory</p>
                 {!advisory && status === "done" && (
-                  <div className="placeholder">
-                    <p>Weather-aware advice could not be loaded.</p>
+                  <div className="placeholder" role="status">
+                    <span className="placeholder-icon" aria-hidden="true">☁</span>
+                    <p>Weather-aware advice could not be loaded for your location.</p>
+                    <p style={{ fontSize: "0.875rem", color: "var(--fg-subtle)", marginTop: "8px" }}>
+                      Enable location access or check manually for local conditions.
+                    </p>
                   </div>
                 )}
-                {status === "scanning" && (
-                  <div className="placeholder scanning-placeholder">
-                    <p>Fetching local weather forecast…</p>
-                  </div>
-                )}
+                {status === "scanning" && <AdvisoryLoadingSkeleton />}
                 {advisory && <AdvisoryCard advisory={advisory} />}
               </div>
             </>
@@ -240,123 +243,12 @@ export default function App() {
         </section>
       </main>
 
-      <footer className="foot">
-        <span>MobileNetV2 · fine-tuned on PlantVillage · ~78.6% eval accuracy</span>
-      </footer>
-    </div>
-  );
-}
-
-function DiagnosisCard({ result }) {
-  const { crop, disease, is_healthy, confidence, low_confidence, treatment, alternatives } =
-    result;
-
-  return (
-    <div className={`card ${is_healthy ? "healthy" : "sick"}`}>
-      {low_confidence && (
-        <div className="low-confidence-banner">
-          <span aria-hidden="true">⚠</span>
-          <span>
-            Low confidence ({confidence}%) — the model isn't sure. Try a closer, better-lit
-            photo of a single leaf before trusting this diagnosis.
-          </span>
-        </div>
-      )}
-
-      <div className="card-head">
-        <div>
-          <p className="card-crop">{crop}</p>
-          <h2 className="card-disease">{disease}</h2>
-        </div>
-        <ConfidenceRing value={confidence} healthy={is_healthy} lowConfidence={low_confidence} />
-      </div>
-
-      {!is_healthy && (
-        <div className="treatment-grid">
-          <div className="treatment organic">
-            <p className="treatment-label">Organic</p>
-            <p>{treatment.organic}</p>
-          </div>
-          <div className="treatment chemical">
-            <p className="treatment-label">Chemical</p>
-            <p>{treatment.chemical}</p>
-          </div>
-        </div>
-      )}
-
-      {is_healthy && (
-        <p className="healthy-note">
-          No signs of disease detected. {treatment.organic}
+      <footer className="foot" role="contentinfo">
+        <p>MobileNetV2 · fine-tuned on PlantVillage · ~78.6% eval accuracy</p>
+        <p style={{ marginTop: "8px", fontSize: "0.6rem" }}>
+          For educational use only. Not a substitute for professional agricultural advice.
         </p>
-      )}
-
-      {alternatives?.length > 0 && (
-        <div className="alt-list">
-          <p className="alt-label">Other possibilities considered</p>
-          <ul>
-            {alternatives.map((alt) => (
-              <li key={alt.raw_label}>
-                <span>
-                  {alt.crop} — {alt.disease}
-                </span>
-                <span className="alt-conf">{alt.confidence}%</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ConfidenceRing({ value, healthy, lowConfidence }) {
-  const r = 30;
-  const c = 2 * Math.PI * r;
-  const offset = c - (value / 100) * c;
-  const ringClass = lowConfidence ? "uncertain" : healthy ? "ok" : "warn";
-  return (
-    <div className="ring">
-      <svg width="72" height="72" viewBox="0 0 72 72">
-        <circle cx="36" cy="36" r={r} className="ring-track" />
-        <circle
-          cx="36"
-          cy="36"
-          r={r}
-          className={`ring-value ${ringClass}`}
-          strokeDasharray={c}
-          strokeDashoffset={offset}
-          transform="rotate(-90 36 36)"
-        />
-      </svg>
-      <span className="ring-number">{value}%</span>
-    </div>
-  );
-}
-
-function AdvisoryCard({ advisory }) {
-  const { crop, forecast_summary, recommendations } = advisory;
-
-  return (
-    <div className="card advisory">
-      <div className="card-head">
-        <div>
-          <p className="card-crop">{crop}</p>
-          <h2 className="card-disease">Weather Advisory</h2>
-        </div>
-        <div className="weather-summary">
-          <span>🌧 {forecast_summary.rain_next_3_days_mm}mm rain</span>
-          <span>💧 {forecast_summary.avg_humidity_pct}% humidity</span>
-        </div>
-      </div>
-
-      <div className="advisory-grid">
-        {recommendations.map((rec, i) => (
-          <div key={i} className="advisory-item">
-            <p className="advisory-category">{rec.category}</p>
-            <p>{rec.advice}</p>
-          </div>
-        ))}
-      </div>
+      </footer>
     </div>
   );
 }

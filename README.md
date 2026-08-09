@@ -18,6 +18,7 @@ venv step needed, `uv run` creates and reuses one automatically based on
 `pyproject.toml`.
 
 ```bash
+cd backend
 uv sync
 uv run main.py
 ```
