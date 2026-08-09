@@ -3,6 +3,7 @@ import logging
 import asyncio
 import time
 import magic
+import os
 from contextlib import asynccontextmanager
 from functools import lru_cache
 
@@ -11,6 +12,7 @@ import httpx
 from fastapi import FastAPI, File, HTTPException, UploadFile, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from transformers import AutoModelForImageClassification, MobileNetV2ImageProcessor
 from backend.treatments import get_treatment, split_label
@@ -43,6 +45,11 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+
+# Serve frontend static files in production
+frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
+if os.path.isdir(frontend_dist):
+    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="static")
 
 
 def _load_model():
