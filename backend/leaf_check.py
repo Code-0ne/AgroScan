@@ -3,10 +3,7 @@ import numpy as np
 
 
 def is_leaf_image(raw_bytes: bytes, min_plant_fraction: float = 0.08) -> bool:
-    """
-    Fast heuristic: reject images that don't contain enough plant-colored pixels.
-    Runs before the model to prevent forced misclassification of non-leaf photos.
-    """
+
     try:
         img = Image.open(io.BytesIO(raw_bytes))
         img.verify()
@@ -50,9 +47,6 @@ def is_leaf_image(raw_bytes: bytes, min_plant_fraction: float = 0.08) -> bool:
 
 
 def is_leaf_image_detailed(raw_bytes: bytes) -> tuple[bool, dict]:
-    """
-    Returns (is_leaf, details_dict) for debugging/logging.
-    """
     try:
         img = Image.open(io.BytesIO(raw_bytes))
         img.verify()
