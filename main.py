@@ -5,7 +5,6 @@ import time
 import magic
 import os
 from contextlib import asynccontextmanager
-from functools import lru_cache
 
 import torch
 import httpx
@@ -15,18 +14,17 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from transformers import AutoModelForImageClassification, MobileNetV2ImageProcessor
-from backend.treatments import get_treatment, split_label
-from backend.advisory import build_advisory
-from backend.leaf_check import is_leaf_image
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s %(message)s"
-)
+from treatments import get_treatment, split_label
+from advisory import build_advisory
+from leaf_check import is_leaf_image
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger("agro-scan")
 
 MODEL_NAME = "linkanjarad/mobilenet_v2_1.0_224-plant-disease-identification"
-MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+MAX_UPLOAD_MB = 8
+MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
 LOW_CONFIDENCE_THRESHOLD = 50.0
 MODEL_LOAD_TIMEOUT = 60
@@ -46,7 +44,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve frontend static files in production
+# Serve frontend in production
 frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 if os.path.isdir(frontend_dist):
     app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="static")
@@ -67,7 +65,7 @@ def _load_model():
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     loop = asyncio.get_event_loop()
     load_task = loop.run_in_executor(None, _load_model)
     try:
@@ -78,10 +76,7 @@ async def lifespan(app: FastAPI):
         logger.error("Model load timeout")
     yield
     global processor, model
-    del model
-    del processor
-    model = None
-    processor = None
+    model = processor = None
     model_ready.clear()
 
 
@@ -127,31 +122,16 @@ def _validate_image(raw_bytes: bytes) -> str:
     return mime
 
 
-@app.post("/diagnose")
-async def diagnose(file: UploadFile = File(...)):
-    await _ensure_model_ready()
-
-    raw_bytes = await file.read()
-    if not raw_bytes:
-        raise HTTPException(400, "Empty file")
-    if len(raw_bytes) > MAX_UPLOAD_BYTES:
-        raise HTTPException(413, f"File too large (max {MAX_UPLOAD_BYTES // (1024 * 1024)} MB)")
-
-    _validate_image(raw_bytes)
-
-    if not is_leaf_image(raw_bytes):
-        raise HTTPException(
-            422,
-            "This doesn't look like a leaf photo — please upload a clear, close-up photo of a single plant leaf."
-        )
-
+def _open_image(raw_bytes: bytes) -> Image.Image:
     try:
-        image = Image.open(io.BytesIO(raw_bytes))
-        image.verify()
-        image = Image.open(io.BytesIO(raw_bytes)).convert("RGB")
+        img = Image.open(io.BytesIO(raw_bytes))
+        img.verify()
+        return Image.open(io.BytesIO(raw_bytes)).convert("RGB")
     except Exception:
         raise HTTPException(400, "Corrupted or unsupported image")
 
+
+async def _run_inference(image: Image.Image):
     inputs = processor(images=image, return_tensors="pt")
     device = next(model.parameters()).device
     inputs = {k: v.to(device) for k, v in inputs.items()}
@@ -159,9 +139,8 @@ async def diagnose(file: UploadFile = File(...)):
     loop = asyncio.get_event_loop()
     with torch.no_grad():
         outputs = await loop.run_in_executor(None, lambda: model(**inputs))
-    logits = outputs.logits
-    probs = torch.nn.functional.softmax(logits, dim=-1)[0]
 
+    probs = torch.nn.functional.softmax(outputs.logits, dim=-1)[0]
     top_probs, top_indices = torch.topk(probs, k=3)
 
     predictions = []
@@ -175,6 +154,26 @@ async def diagnose(file: UploadFile = File(...)):
             "is_healthy": is_healthy,
             "confidence": round(prob * 100, 1),
         })
+    return predictions
+
+
+@app.post("/diagnose")
+async def diagnose(file: UploadFile = File(...)):
+    await _ensure_model_ready()
+
+    raw_bytes = await file.read()
+    if not raw_bytes:
+        raise HTTPException(400, "Empty file")
+    if len(raw_bytes) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, f"File too large (max {MAX_UPLOAD_MB} MB)")
+
+    _validate_image(raw_bytes)
+
+    if not is_leaf_image(raw_bytes):
+        raise HTTPException(422, "This doesn't look like a leaf photo — please upload a clear, close-up photo of a single plant leaf.")
+
+    image = _open_image(raw_bytes)
+    predictions = await _run_inference(image)
 
     top = predictions[0]
     treatment = get_treatment(top["raw_label"])

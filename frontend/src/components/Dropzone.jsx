@@ -1,22 +1,15 @@
 'use client'
 
-import { useState, useRef, useCallback, useEffect } from 'react'
-import { motion, useMotionValue, useTransform, useSpring } from 'framer-motion'
-import { Camera, Upload } from '@phosphor-icons/react'
+import { useState, useRef, useEffect } from 'react'
+import { motion, useMotionValue, useSpring } from 'framer-motion'
+import { Camera } from '@phosphor-icons/react'
 
-const MAX_FILE_BYTES = 8 * 1024 * 1024
+const MAX_FILE_MB = 8
+const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024
 const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
 
-export function Dropzone({ 
-  file, 
-  previewUrl, 
-  status, 
-  onFileSelect, 
-  onReset,
-  scanProgress 
-}) {
+export function Dropzone({ file, previewUrl, status, onFileSelect, onReset, scanProgress }) {
   const [dragActive, setDragActive] = useState(false)
-  const [hoverProgress, setHoverProgress] = useState(0)
   const inputRef = useRef(null)
   const dropzoneRef = useRef(null)
 
@@ -25,61 +18,50 @@ export function Dropzone({
   const rotateX = useSpring(0, { stiffness: 100, damping: 20 })
   const rotateY = useSpring(0, { stiffness: 100, damping: 20 })
 
-  const handleMouseMove = useCallback((e) => {
-    if (!dropzoneRef.current) return
-    const rect = dropzoneRef.current.getBoundingClientRect()
-    const centerX = rect.left + rect.width / 2
-    const centerY = rect.top + rect.height / 2
-    const deltaX = (e.clientX - centerX) / (rect.width / 2)
-    const deltaY = (e.clientY - centerY) / (rect.height / 2)
-    x.set(deltaX * 8)
-    y.set(deltaY * 8)
-    rotateY.set(deltaX * 3)
-    rotateX.set(-deltaY * 3)
-  }, [])
+  const handleMouseMove = (e) => {
+    const el = dropzoneRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const dx = (e.clientX - rect.left - rect.width / 2) / (rect.width / 2)
+    const dy = (e.clientY - rect.top - rect.height / 2) / (rect.height / 2)
+    x.set(dx * 8)
+    y.set(dy * 8)
+    rotateY.set(dx * 3)
+    rotateX.set(-dy * 3)
+  }
 
-  const handleMouseLeave = useCallback(() => {
+  const handleMouseLeave = () => {
     x.set(0)
     y.set(0)
     rotateX.set(0)
     rotateY.set(0)
-  }, [])
+  }
 
-  const handleDragOver = useCallback((e) => {
+  const handleDragOver = (e) => {
     e.preventDefault()
     setDragActive(true)
-    setHoverProgress(1)
-  }, [])
+  }
 
-  const handleDragLeave = useCallback(() => {
-    setDragActive(false)
-    setHoverProgress(0)
-  }, [])
+  const handleDragLeave = () => setDragActive(false)
 
-  const handleDrop = useCallback((e) => {
+  const handleDrop = (e) => {
     e.preventDefault()
     setDragActive(false)
-    setHoverProgress(0)
-    const droppedFile = e.dataTransfer.files?.[0]
-    if (droppedFile) onFileSelect(droppedFile)
-  }, [onFileSelect])
+    const f = e.dataTransfer.files?.[0]
+    if (f) onFileSelect(f)
+  }
 
-  const handleClick = useCallback(() => {
-    inputRef.current?.click()
-  }, [])
+  const handleClick = () => inputRef.current?.click()
 
-  const handleFileChange = useCallback((e) => {
-    const selectedFile = e.target.files?.[0]
-    if (selectedFile) onFileSelect(selectedFile)
+  const handleFileChange = (e) => {
+    const f = e.target.files?.[0]
+    if (f) onFileSelect(f)
     e.target.value = ''
-  }, [onFileSelect])
+  }
 
   useEffect(() => {
-    if (status === 'scanning') {
-      setHoverProgress(1)
-    } else if (!dragActive) {
-      setHoverProgress(0)
-    }
+    if (status === 'scanning') setDragActive(true)
+    else if (!dragActive) setDragActive(false)
   }, [status, dragActive])
 
   const isScanning = status === 'scanning'
@@ -133,16 +115,16 @@ export function Dropzone({
         >
           <motion.div
             className="dropzone-icon"
-            animate={{ 
-              scale: dragActive ? 1.1 : hoverProgress > 0 ? 1.05 : 1,
-              rotate: dragActive ? [0, -5, 5, 0] : 0
+            animate={{
+              scale: dragActive ? 1.1 : 1,
+              rotate: dragActive ? [0, -5, 5, 0] : 0,
             }}
-            transition={{ 
-              type: 'spring', 
-              stiffness: 100, 
+            transition={{
+              type: 'spring',
+              stiffness: 100,
               damping: 20,
               repeat: dragActive ? Infinity : 0,
-              duration: 0.5
+              duration: 0.5,
             }}
           >
             <Camera size={48} weight="duotone" />
@@ -162,7 +144,7 @@ export function Dropzone({
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
           >
-            JPG, PNG or WEBP · under 8MB · one leaf, filling most of the frame
+            JPG, PNG or WEBP · under {MAX_FILE_MB}MB · one leaf, filling most of the frame
           </motion.p>
         </motion.div>
       )}
@@ -171,14 +153,14 @@ export function Dropzone({
         <motion.div className="scan-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
           <motion.div
             className="scan-line"
-            animate={{ 
+            animate={{
               y: ['-15%', '115%'],
-              opacity: [0, 1, 1, 0]
+              opacity: [0, 1, 1, 0],
             }}
-            transition={{ 
-              duration: 2.2, 
-              repeat: Infinity, 
-              ease: [0.16, 1, 0.3, 1] 
+            transition={{
+              duration: 2.2,
+              repeat: Infinity,
+              ease: [0.16, 1, 0.3, 1],
             }}
           />
         </motion.div>
